@@ -1,12 +1,22 @@
 # 🧹 lint-md/core
 
-lint-md/core 是 lint-md 体系中的规则引擎核心，专注解决中文 Markdown 在团队协作中的一致性问题。
-它基于 AST 执行规则检查与自动修复，适用于文档、博客、知识库等长期维护场景。
+<p align="center">
+  <a href="https://github.com/lint-md">
+    <img width="100" src="https://avatars.githubusercontent.com/u/59811714">
+  </a>
+</p>
 
+
+<p align="center">让中文 Markdown 写作更规范、更一致。</p>
+
+<p align="center">Lint your Chinese Markdown for cleaner, more consistent writing.</p>
+
+lint-md/core 是 lint-md 体系中的规则引擎核心，专注解决中文 Markdown 在团队协作中的一致性问题。它基于 AST 执行规则检查与自动修复，适用于文档、博客、知识库等长期维护场景。
+
+[![stars](https://img.shields.io/github/stars/lint-md/lint-md?style=social)](https://github.com/lint-md/lint-md)
 [![npm version](https://img.shields.io/npm/v/@lint-md/core.svg)](https://www.npmjs.com/package/@lint-md/core)
 [![npm downloads](https://img.shields.io/npm/dm/@lint-md/core.svg)](https://www.npmjs.com/package/@lint-md/core)
 [![license](https://img.shields.io/github/license/lint-md/lint-md)](https://github.com/lint-md/lint-md/blob/main/LICENSE)
-[![stars](https://img.shields.io/github/stars/lint-md/lint-md?style=social)](https://github.com/lint-md/lint-md)
 
 ## ✨ 特性
 
@@ -59,7 +69,7 @@ console.log(result.fixedResult);
 
 目前内置 16 个规则，覆盖大部分的中文规则。
 
-| 规则名 | 说明 | 可配置 | 可自动修复 |
+| 规则名 | 说明 | 可配置 | 可修复 |
 | --- | --- | --- | --- |
 | `space-around-alphabet` | 中文与英文之间需要空格 | 否 | 是 |
 | `space-around-number` | 中文与数字之间需要空格 | 否 | 是 |
@@ -76,7 +86,7 @@ console.log(result.fixedResult);
 | `no-multiple-space-blockquote` | 引用头部和内容间只能有一个空格 | 否 | 是 |
 | `correct-title-trailing-punctuation` | 标题末尾标点需合法 | 否 | 是 |
 | `no-space-in-inline-code` | 行内代码内容前后不能有空格 | 否 | 是 |
-| `no-long-code` | 代码块行长度不能超过限制 | 是（`length`、`exclude`） | 否 |
+| `no-long-code` | 代码块行长度不能超过限制 | 是 | 否 |
 
 欢迎大家提交需求，或者提交 PR 新增规则。
 
