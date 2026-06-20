@@ -1,5 +1,7 @@
+import type { MarkdownTextNode } from '@lint-md/parser';
 import type { LintMdRule } from '../types';
 import { isChineseCharacter } from '../utils/char-helper';
+import { TextScanner } from '../utils/text-scanner';
 
 const HALF_TO_FULL: Record<string, string> = {
   ',': '，',
@@ -64,12 +66,11 @@ const noHalfWidthPunctuation: LintMdRule = {
   },
   create: (context) => {
     return {
-      text: (node) => {
-        const { value } = node;
-        const { offset: startOffset } = node.position.start;
-        let currentLine = node.position.start.line;
-        let currentColumn = node.position.start.column;
+      text: (node: MarkdownTextNode) => {
+        const scanner = new TextScanner(node);
+        const { value } = scanner;
 
+        // 预处理：找出需要转换的括号对
         const parenthesisPairs = getParenthesisPairs(value);
         const convertIndices = new Set<number>();
 
@@ -80,20 +81,11 @@ const noHalfWidthPunctuation: LintMdRule = {
           }
         }
 
-        for (let i = 0; i < value.length; i++) {
-          const char = value[i];
-
-          if (char === '\n') {
-            currentLine += 1;
-            currentColumn = 1;
-            continue;
-          }
-
+        // 逐字符扫描
+        scanner.forEachChar((char, i, pos) => {
           const fullChar = HALF_TO_FULL[char];
-          if (!fullChar) {
-            currentColumn += 1;
-            continue;
-          }
+          if (!fullChar)
+            return;
 
           const isParenthesis = char === '(' || char === ')';
           const shouldConvert = isParenthesis
@@ -103,27 +95,14 @@ const noHalfWidthPunctuation: LintMdRule = {
           if (shouldConvert) {
             context.report({
               loc: {
-                start: {
-                  line: currentLine,
-                  column: currentColumn
-                },
-                end: {
-                  line: currentLine,
-                  column: currentColumn + 1
-                }
+                start: { line: pos.line, column: pos.column },
+                end: { line: pos.line, column: pos.column + 1 }
               },
               message: `不应在中文中使用半角标点"${char}"，请使用全角"${fullChar}"`,
-              fix: (fixer) => {
-                return fixer.replaceTextRange(
-                  [startOffset + i, startOffset + i + 1],
-                  fullChar
-                );
-              }
+              fix: fixer => fixer.replaceTextRange([pos.offset, pos.offset + 1], fullChar)
             });
           }
-
-          currentColumn += 1;
-        }
+        });
       }
     };
   }

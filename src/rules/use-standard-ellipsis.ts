@@ -1,45 +1,6 @@
 import type { MarkdownCodeNode } from '@lint-md/parser';
 import type { LintMdRule } from '../types';
-
-/**
- * 找到所有的 …
- */
-const findAllSingleEllipsis = (s: string) => {
-  const r: { index: number; length: number }[] = [];
-  const re = /…+/g;
-
-  let matched = re.exec(s);
-  while (matched !== null) {
-    if (matched[0].length !== 2) {
-      r.push({
-        index: matched.index,
-        length: matched[0].length
-      });
-    }
-    matched = re.exec(s);
-  }
-
-  return r;
-};
-
-/**
- * 找到所有的 . 组成的省略号
- */
-const findAllDotEllipsis = (s: string) => {
-  const r: { index: number; length: number }[] = [];
-  const re = /\.{4,}/g;
-
-  let matched = re.exec(s);
-  while (matched !== null) {
-    r.push({
-      index: matched.index,
-      length: matched[0].length
-    });
-    matched = re.exec(s);
-  }
-
-  return r;
-};
+import { TextScanner } from '../utils/text-scanner';
 
 const useStandardEllipsis: LintMdRule = {
   meta: {
@@ -48,33 +9,24 @@ const useStandardEllipsis: LintMdRule = {
   create: (context) => {
     return {
       text: (node: MarkdownCodeNode) => {
-        const text = node.value;
+        const scanner = new TextScanner(node);
 
-        const { line, column } = node.position.start;
+        // 找到所有的 . 组成的省略号
+        const dotMatches = scanner.findAllMatches(/\.{4,}/g);
 
-        const toFixList: {
-          index: number
-          length: number
-        }[] = findAllDotEllipsis(text).concat(findAllSingleEllipsis(text));
+        // 找到所有的 …（只要不是两个，都是不规范的）
+        const singleMatches = scanner.findAllMatches(/…+/g)
+          .filter(m => m.length !== 2);
 
-        toFixList.forEach((item) => {
+        const allMatches = dotMatches
+          .concat(singleMatches)
+          .sort((a, b) => a.index - b.index);
+
+        allMatches.forEach((m) => {
           context.report({
-            loc: {
-              start: {
-                line,
-                column: column + item.index
-              },
-              end: {
-                line,
-                column: column + item.index + item.length
-              }
-            },
+            loc: m.loc,
             message: '请使用标准规范的省略号',
-            fix: (fixer) => {
-              // column 不是下标，需要 -1
-              const startIndex = node.position.start.offset + item.index;
-              return fixer.replaceTextRange([startIndex, startIndex + item.length], '……');
-            }
+            fix: fixer => fixer.replaceTextRange(m.absoluteRange, '……')
           });
         });
       }

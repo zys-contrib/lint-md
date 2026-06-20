@@ -15,11 +15,6 @@ const getSerializedInlineCode = (content: string, preferredFenceLength: number) 
   return `${fence}${requiresPadding ? ` ${content} ` : content}${fence}`;
 };
 
-const getFenceLength = (raw: string) => {
-  const match = raw.match(/^`+/);
-  return match?.[0].length || 1;
-};
-
 const runReport = (ctx: LintMdRuleContext, node: MarkdownCodeNode, value: string, fenceLength: number) => {
   ctx.report({
     loc: node.position,
@@ -31,6 +26,11 @@ const runReport = (ctx: LintMdRuleContext, node: MarkdownCodeNode, value: string
       ], getSerializedInlineCode(value, fenceLength));
     }
   });
+};
+
+const getFenceLength = (raw: string) => {
+  const match = raw.match(/^`+/);
+  return match?.[0].length || 1;
 };
 
 const noSpaceInInlineCode: LintMdRule = {
