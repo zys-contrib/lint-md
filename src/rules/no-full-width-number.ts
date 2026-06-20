@@ -22,15 +22,16 @@ const FULL_WIDTH_NUMBER_REPLACEMENT_MAP = {
 const findAllFullWidthNumbers = (s: string) => {
   const re = /[０-９]+/g;
   const r: { number: string; index: number }[] = [];
-  let matched: RegExpExecArray | null;
 
-  // 循环找出所有的数字
-  while ((matched = re.exec(s)) !== null) {
+  let matched = re.exec(s);
+  while (matched !== null) {
     r.push({
       number: matched[0],
       index: matched.index
     });
+    matched = re.exec(s);
   }
+
   return r;
 };
 

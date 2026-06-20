@@ -6,18 +6,19 @@ import type { LintMdRule } from '../types';
  */
 const findAllSingleEllipsis = (s: string) => {
   const r: { index: number; length: number }[] = [];
-  const re = /…+/g; // 使用正则匹配
-  let matched: RegExpExecArray | null;
+  const re = /…+/g;
 
-  while ((matched = re.exec(s)) !== null) {
-    // 只要不是两个，都是不规范的
+  let matched = re.exec(s);
+  while (matched !== null) {
     if (matched[0].length !== 2) {
       r.push({
         index: matched.index,
         length: matched[0].length
       });
     }
+    matched = re.exec(s);
   }
+
   return r;
 };
 
@@ -26,15 +27,17 @@ const findAllSingleEllipsis = (s: string) => {
  */
 const findAllDotEllipsis = (s: string) => {
   const r: { index: number; length: number }[] = [];
-  const re = /\.{4,}/g; // 使用正则匹配
-  let matched: RegExpExecArray | null;
+  const re = /\.{4,}/g;
 
-  while ((matched = re.exec(s)) !== null) {
+  let matched = re.exec(s);
+  while (matched !== null) {
     r.push({
       index: matched.index,
       length: matched[0].length
     });
+    matched = re.exec(s);
   }
+
   return r;
 };
 
