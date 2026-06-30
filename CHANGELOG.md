@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.1.0](https://github.com/lint-md/lint-md/compare/v2.0.0...v2.1.0) - 2024-06-29
+## [2.1.1](https://github.com/lint-md/lint-md/compare/v2.0.0...v2.1.1) - 2026-06-30
 
 ### Features
 
