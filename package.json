@@ -30,7 +30,7 @@
     "chinese"
   ],
   "dependencies": {
-    "@lint-md/parser": "~0.0.14"
+    "@lint-md/parser": "~0.1.2"
   },
   "devDependencies": {
     "@attachments/eslint-config": "^0.3.3",
@@ -71,5 +71,8 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
-  "homepage": "https://github.com/lint-md#readme"
+  "homepage": "https://github.com/lint-md#readme",
+  "engines": {
+    "node": ">=20"
+  }
 }
