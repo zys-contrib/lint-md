@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.3](https://github.com/lint-md/lint-md/compare/v2.1.2...v2.1.3) - 2026-07-06
+
+### Performance
+
+- **space-around-alphabet**: scan original string directly, eliminate markText split/map/join temporary allocation, RSS -79.7% on 1 MiB long-paragraph (#160, #165)
+
+### Chore
+
+- add memory benchmark infrastructure and analysis scripts (#163, #164)
+
 ## [2.1.2](https://github.com/lint-md/lint-md/compare/v2.1.1...v2.1.2) - 2026-07-03
 
 ### Chore
