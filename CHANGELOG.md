@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.4](https://github.com/lint-md/lint-md/compare/v2.1.3...v2.1.4) - 2026-07-10
+
+### Bug Fixes
+
+- **no-long-code**: compute real offset to stop content degrading to whole doc (#170)
+- **lint-markdown**: add function overloads for fixedResult return type, correct README description (#172)
+- **handle-fix-mode**: align autofix semantics with ESLint, support cascading fixes (#173)
+- **handle-fix-mode**: preserve last-round notAppliedFixes instead of resetting to empty, expose via public API (#175)
+
+### Performance
+
+- **text-scanner**: lazy pre-compute line break indices, positionAt from O(n) to O(log n) via binary search (#174)
+
 ## [2.1.3](https://github.com/lint-md/lint-md/compare/v2.1.2...v2.1.3) - 2026-07-06
 
 ### Performance
