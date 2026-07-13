@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.5](https://github.com/lint-md/lint-md/compare/v2.1.4...v2.1.5) - 2026-07-13
+
+### Features
+
+- **override-default-rules**: alias third-party rules by `rule.meta.name`; throw on invalid config; detect option conflicts (#181)
+- **handle-fix-mode**: track convergence state, rounds, and fix-loop cycle detection (#182)
+- **rule-manager**: observable `fallbackHits` statistics and parser-offset contract tests (#183)
+- **run-lint**: structured root-level rule execution errors with collect/strict policy and `RuleExecutionFailure` public export (#185, #179)
+- **text-scanner**: observable index-build diagnostics and reproducible #176 profile script (#184)
+
+### Performance
+
+- **text-scanner**: pre-compute line-break indices, `positionAt` from O(n) to O(log n) binary search (#174)
+
 ## [2.1.4](https://github.com/lint-md/lint-md/compare/v2.1.3...v2.1.4) - 2026-07-10
 
 ### Bug Fixes
