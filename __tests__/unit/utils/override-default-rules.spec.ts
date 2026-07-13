@@ -71,11 +71,22 @@ describe('overrideDefaultRules', () => {
     }).toThrow(/第三方规则.*配置长度必须为 3/);
   });
 
-  it('should not register third-party rule when config is not an array', () => {
+  it('should throw for unknown rule when config is not an array (issue #177)', () => {
+    expect(() => {
+      overrideDefaultRules(defaultRules, {
+        'custom-rule': RULE_SEVERITY.WARN as any
+      });
+    }).toThrow(/配置格式非法/);
+  });
+
+  it('should register third-party rule alias by meta.name (issue #177)', () => {
+    const customRule = createMockRule('actual-name');
     const result = overrideDefaultRules(defaultRules, {
-      'custom-rule': RULE_SEVERITY.WARN as any
+      'configured-alias': [customRule, RULE_SEVERITY.WARN, {}]
     });
-    expect(result['custom-rule']).toBeUndefined();
+    // 配置键与 meta.name 不等时，按 meta.name 建立别名，回查仍能命中同一记录。
+    expect(result['configured-alias']).toBeDefined();
+    expect(result['actual-name']).toBe(result['configured-alias']);
   });
 
   it('should handle empty default rules', () => {
@@ -91,4 +102,25 @@ describe('overrideDefaultRules', () => {
     expect(result['rule-a'].severity).toBe(RULE_SEVERITY.OFF);
     expect(result['rule-b'].severity).toBe(RULE_SEVERITY.OFF);
   });
+  it('should throw for prototype-like unknown rule name and not pollute Object.prototype (issue #177)', () => {
+    const rules = JSON.parse('{"__proto__": 2}') as any;
+
+    expect(() => overrideDefaultRules(defaultRules, rules)).toThrow(/未知规则/);
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, 'severity')).toBe(false);
+  });
+
+  it('should store third-party rule whose meta.name is a prototype key as plain key without pollution (issue #177)', () => {
+    // 使用无原型注册表后，meta.name 为 __proto__ 的规则会被当作普通 own 属性保存，
+    // 不会改变 Object.prototype，也不会崩溃。
+    const protoRule = createMockRule('__proto__');
+    const result = overrideDefaultRules(defaultRules, {
+      'proto-alias': [protoRule, RULE_SEVERITY.WARN, {}]
+    });
+
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, 'severity')).toBe(false);
+    expect((result as any)['__proto__']).toBeDefined();
+    expect((result as any)['__proto__'].rule).toBe(protoRule);
+  });
 });
+
+

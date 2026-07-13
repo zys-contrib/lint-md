@@ -5,7 +5,8 @@ import type {
   LintMdResult,
   LintMdRuleWithOptions,
   LintMdRulesConfig,
-  LintReportItem
+  LintReportItem,
+  RegisteredRules
 } from '../types';
 import * as internalRuleConfig from '../rules';
 import { overrideDefaultRules } from '../utils/override-default-rules';
@@ -49,10 +50,25 @@ export function lintMarkdown(markdown: string, rules: LintMdRulesConfig = {}, is
   const registeredRuleEntries = Object.entries(registeredRules);
 
   // 最终的 rules
+  // 注意：注册表可能为同一注册记录建立过别名（配置键 + meta.name 指向同一对象），
+  // 这里按注册记录引用去重，避免规则被重复执行导致报告与计数翻倍。
+  // 按记录（而非 rule）去重很重要：当同一个 rule 对象被两个配置键复用时，
+  // 它们是不同的注册记录（不同 severity/options），冲突检查已在注册阶段阻止，
+  // 此处不会遇到这种情况，但按记录去重更能与注册表契约保持一致。
+  const seenRecords = new Set<RegisteredRules[string]>();
   const internalRules = registeredRuleEntries
     .filter((item) => {
+      const value = item[1];
       // 过滤掉 severity 为 0 的规则，提高性能
-      return item[1].severity !== RULE_SEVERITY.OFF;
+      if (value.severity === RULE_SEVERITY.OFF) {
+        return false;
+      }
+      // 同一注册记录只保留一次（配置键与 meta.name 别名指向同一对象）
+      if (seenRecords.has(value)) {
+        return false;
+      }
+      seenRecords.add(value);
+      return true;
     })
     .map((options) => {
       const value = options[1];
