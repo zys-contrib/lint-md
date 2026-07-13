@@ -1,6 +1,7 @@
 import { handleFixMode } from '../../src/core/handle-fix-mode';
 import { MAX_LINT_AND_FIX_CALL_TIMES } from '../../src/common/constant';
 import type { LintMdRule, LintMdRuleContext, FixConfig } from '../../src/types';
+import { FixConvergence } from '../../src/types';
 
 function makeRule(config: {
   name: string;
@@ -347,4 +348,170 @@ describe('handleFixMode', () => {
     expect(result.fixedResult.notAppliedFixes.length).toBe(1);
     expect(result.fixedResult.notAppliedFixes[0].text).toBe('Y');
   });
+
+  test('A -> B -> A oscillation: stops after 2 rounds, returns applied A', () => {
+    // Round 1: "A" -> ruleA "A"->"B"
+    // Round 2: "B" -> ruleB "B"->"A"
+    // After round 2 applies the fix (B -> A), current becomes "A" which was already
+    // seen in round 1 => CYCLE_DETECTED, break. Returns the A applied in round 2,
+    // NOT the round-1 B.
+    const ruleA = makeRule({
+      name: 'a-to-b',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'A') {
+          ctx.report({
+            loc: node.position,
+            message: 'A to B',
+            fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'B' })
+          });
+        }
+      }
+    });
+
+    const ruleB = makeRule({
+      name: 'b-to-a',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'B') {
+          ctx.report({
+            loc: node.position,
+            message: 'B to A',
+            fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'A' })
+          });
+        }
+      }
+    });
+
+    const result = handleFixMode('A', [{ rule: ruleA }, { rule: ruleB }]);
+    expect(result.fixedResult.result).toBe('A');
+    expect(result.fixedResult.rounds).toBe(2);
+    expect(result.fixedResult.convergence).toBe(FixConvergence.CYCLE_DETECTED);
+  });
+
+  test('stable cascade ends STABLE with one extra no-fix round', () => {
+    // Round 1: 'aa' -> 'cc' (ruleA then ruleB); Round 2: 'cc' -> no fixes => STABLE
+    const ruleA = makeRule({
+      name: 'a-aa-to-bb',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'aa') {
+          ctx.report({ loc: node.position, message: 'aa', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'bb' }) });
+        }
+      }
+    });
+    const ruleB = makeRule({
+      name: 'b-bb-to-cc',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'bb') {
+          ctx.report({ loc: node.position, message: 'bb', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'cc' }) });
+        }
+      }
+    });
+
+    const result = handleFixMode('aa', [{ rule: ruleA }, { rule: ruleB }]);
+    expect(result.fixedResult.result).toBe('cc');
+    expect(result.fixedResult.convergence).toBe(FixConvergence.STABLE);
+    // round1: aa->bb, round2: bb->cc, round3: no-fix check => 3 rounds
+    expect(result.fixedResult.rounds).toBe(3);
+  });
+
+  test('text unchanged with conflict is STABLE via result===current branch', () => {
+    // ruleA replaces 'abc' -> 'abc' (text unchanged), ruleB 'abc' -> 'Y' conflicts with it.
+    // After applyFix, text stays 'abc' => STABLE on the FIRST round (result === current).
+    const ruleA = makeRule({
+      name: 'same',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'abc') {
+          ctx.report({ loc: node.position, message: 'same', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'abc' }) });
+        }
+      }
+    });
+    const ruleB = makeRule({
+      name: 'to-y',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'abc') {
+          ctx.report({ loc: node.position, message: 'y', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'Y' }) });
+        }
+      }
+    });
+
+    const result = handleFixMode('abc', [{ rule: ruleA }, { rule: ruleB }]);
+    expect(result.fixedResult.result).toBe('abc');
+    expect(result.fixedResult.convergence).toBe(FixConvergence.STABLE);
+    expect(result.fixedResult.rounds).toBe(1);
+    // ruleB's fix was dropped (conflict), still reported in last round
+    expect(result.fixedResult.notAppliedFixes.length).toBe(1);
+    expect(result.fixedResult.notAppliedFixes[0].text).toBe('Y');
+  });
+
+  test('cycle of length MAX is detected, not mislabeled MAX_ROUNDS', () => {
+    // S0 -> S1 -> ... -> S9 -> S0, where S_i is the string i repeated.
+    // After the 10th round, current returns to S0 which was already seen,
+    // so it must be CYCLE_DETECTED (not MAX_ROUNDS / rounds 10 truncation).
+    const states = Array.from({ length: MAX_LINT_AND_FIX_CALL_TIMES }, (_, i) => String(i).repeat(3));
+    const rules = states.map((state, i) => {
+      const next = states[(i + 1) % states.length];
+      return makeRule({
+        name: `s${i}-to-s${(i + 1) % states.length}`,
+        selector: 'text',
+        reportFn: (ctx, node) => {
+          if (node.value === state) {
+            ctx.report({ loc: node.position, message: 'step', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: next }) });
+          }
+        }
+      });
+    });
+
+    const result = handleFixMode(states[0], rules.map((rule) => ({ rule })));
+    expect(result.fixedResult.rounds).toBe(MAX_LINT_AND_FIX_CALL_TIMES);
+    expect(result.fixedResult.convergence).toBe(FixConvergence.CYCLE_DETECTED);
+  });
+
+  test('monotonic growth hits MAX_ROUNDS at 10, not mis-detected as cycle', () => {
+    let callCount = 0;
+    const rule = makeRule({
+      name: 'double-a',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'a'.repeat(Math.pow(2, callCount))) {
+          callCount++;
+          ctx.report({ loc: node.position, message: 'double', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: node.value + node.value }) });
+        }
+      }
+    });
+
+    const result = handleFixMode('a', [{ rule }]);
+    expect(callCount).toBe(MAX_LINT_AND_FIX_CALL_TIMES);
+    expect(result.fixedResult.rounds).toBe(MAX_LINT_AND_FIX_CALL_TIMES);
+    expect(result.fixedResult.convergence).toBe(FixConvergence.MAX_ROUNDS);
+  });
+
+  test('no fixes => STABLE with rounds === 1', () => {
+    const rule = makeRule({ name: 'no-op', selector: 'text', reportFn: () => {} });
+    const result = handleFixMode('hello world', [{ rule }]);
+    expect(result.fixedResult.convergence).toBe(FixConvergence.STABLE);
+    expect(result.fixedResult.rounds).toBe(1);
+  });
+
+  test('metrics records rounds and per-round wall times', () => {
+    const rule = makeRule({
+      name: 'replace-foo',
+      selector: 'text',
+      reportFn: (ctx, node) => {
+        if (node.value === 'foo') {
+          ctx.report({ loc: node.position, message: 'foo', fix: () => ({ range: [node.position.start.offset, node.position.end.offset], text: 'bar' }) });
+        }
+      }
+    });
+
+    const result = handleFixMode('foo', [{ rule }]);
+    expect(result.fixedResult.metrics).toBeDefined();
+    expect(result.fixedResult.metrics!.rounds).toBe(result.fixedResult.rounds);
+    expect(result.fixedResult.metrics!.perRound).toHaveLength(result.fixedResult.rounds);
+  });
+
 });
