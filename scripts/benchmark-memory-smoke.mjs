@@ -22,12 +22,13 @@ const REQUIRED_FIELDS = [
   'wallTimeMs', 'maxRss', 'rssBefore', 'rssAfter', 'rssDelta',
   'heapBefore', 'heapAfter',
   'reportCount', 'fixCount', 'runLintCalls',
+  'textScannerIndexBuilds', 'textScannerIndexBuildWallTimeMs',
   'nodeVersion', 'platform', 'arch',
 ];
 
 const VALID_CASES = new Set([
   'noop', 'input-only', 'parser-only', 'parse-traverse',
-  'single-rule', 'all-rules', 'fix-mode',
+  'single-rule', 'text-scanner-rules', 'all-rules', 'fix-mode',
 ]);
 
 const VALID_SHAPES = new Set([
@@ -60,7 +61,8 @@ function parseNDJSON(text) {
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`Assertion failed: ${message}`);
+  if (!condition)
+    throw new Error(`Assertion failed: ${message}`);
 }
 
 async function main() {
@@ -101,6 +103,16 @@ async function main() {
     assert(typeof line.reportCount === 'number', 'reportCount should be a number');
     assert(line.fixCount === null || typeof line.fixCount === 'number', 'fixCount should be number or null');
     assert(line.runLintCalls === null || typeof line.runLintCalls === 'number', 'runLintCalls should be number or null');
+    // notAppliedFixCount 仅 fix-mode 输出
+    if (line.case === 'fix-mode') {
+      assert(line.notAppliedFixCount === null || typeof line.notAppliedFixCount === 'number',
+        'notAppliedFixCount should be number or null on fix-mode');
+    }
+    // Scanner index-build diagnostics: non-negative numbers (present on every case).
+    assert(typeof line.textScannerIndexBuilds === 'number' && line.textScannerIndexBuilds >= 0,
+      'textScannerIndexBuilds should be a non-negative number');
+    assert(typeof line.textScannerIndexBuildWallTimeMs === 'number' && line.textScannerIndexBuildWallTimeMs >= 0,
+      'textScannerIndexBuildWallTimeMs should be a non-negative number');
     assert(typeof line.run === 'number' && line.run >= 1, 'run should be >= 1');
 
     assert(VALID_CASES.has(line.case), `unknown case: ${line.case}`);
@@ -128,6 +140,33 @@ async function main() {
   if (noopLines.length > 0) {
     console.log(`  noop baseline RSS delta: ${noopLines[0].rssDelta} bytes`);
   }
+
+  // Test 6: profile-scanner-176.mjs 独立 smoke（#176 可复现数据脚本）
+  console.log('  Running profile-scanner-176.mjs (many-small-nodes, 4 KiB, 1 run)...');
+  const profileOut = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      path.join(SCRIPT_DIR, 'profile-scanner-176.mjs'),
+      '--shape', 'many-small-nodes',
+      '--bytes', '4096',
+      '--runs', '1',
+      '--warmup', '0',
+    ], { cwd: path.resolve(SCRIPT_DIR, '..'), stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { out += c; });
+    child.on('close', code => resolve({ code, out }));
+    child.on('error', reject);
+  });
+  assert(profileOut.code === 0, 'profile-scanner-176.mjs should exit 0');
+  const profileLines = parseNDJSON(profileOut.out);
+  assert(profileLines.length === 1, 'profile should output exactly one line');
+  const pl = profileLines[0];
+  assert(typeof pl.textNodeCount === 'number' && pl.textNodeCount > 0, 'profile textNodeCount should be > 0');
+  assert(typeof pl.reportCount === 'number' && pl.reportCount > 0, 'profile reportCount should be > 0');
+  assert(Array.isArray(pl.buildMsRuns) && pl.buildMsRuns.length === 1, 'profile buildMsRuns should have 1 entry');
+  assert(Array.isArray(pl.wallMsRuns) && pl.wallMsRuns.length === 1, 'profile wallMsRuns should have 1 entry');
+  assert(typeof pl.bytes === 'number' && pl.bytes > 0, 'profile bytes (actual) should be > 0');
+  assert(typeof pl.requestedBytes === 'number' && pl.requestedBytes === 4096, 'profile requestedBytes should be 4096');
 
   console.log('\nSmoke test PASSED');
 }
