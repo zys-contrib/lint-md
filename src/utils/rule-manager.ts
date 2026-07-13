@@ -1,5 +1,23 @@
-import type { LintMdRuleContext, LintMdRuleWithOptions, ReportOption } from '../types';
+import type {
+  LintMdRuleContext,
+  LintMdRuleWithOptions,
+  ReportOption,
+  ReportPosition
+} from '../types';
 import { createFixer } from './fixer';
+
+/** 合法 offset 必须是有限非负整数：排除 NaN / Infinity / 负数，避免第三方规则传入非法值绕过兜底。 */
+export const isValidOffset = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+/** 优先用节点真实 offset；缺失或非法时退回 (line, column) 兜底换算。 */
+const resolveReportOffset = (
+  position: ReportPosition,
+  resolveOffset: (line: number, column: number) => number
+): number =>
+  isValidOffset(position.offset)
+    ? position.offset
+    : resolveOffset(position.line, position.column);
 
 /**
  * 初始化全局 rule 管理器
@@ -13,21 +31,22 @@ export const createRuleManager = (appliedMarkdown: string) => {
   // 已经上报的数据
   const allReportedData: ReportOption[] = [];
 
-  // 获取所有上报的数据
-  const getReportData = () => {
-    return allReportedData;
-  };
+  // 统计触发兜底的报告数，使防御性 fallback 可观测、可收窄：
+  // 计数单位是一条报告，其 start 或 end 任一 offset 缺失/非法计 1（同一报告不重复计）。
+  let fallbackHits = 0;
 
-  // 获取所有的 fix
-  const getAllFixes = () => {
-    return allReportedData.flatMap((item) => {
+  const getFallbackHits = () => fallbackHits;
+
+  const getReportData = () => allReportedData;
+
+  const getAllFixes = () =>
+    allReportedData.flatMap((item) => {
       if (typeof item.fix === 'function') {
         const fix = item.fix(fixer);
         return [{ ...fix, targetRule: item.name }];
       }
       return [];
     });
-  };
 
   // 初始化一个 rule context
   const createRuleContext = (
@@ -37,8 +56,7 @@ export const createRuleManager = (appliedMarkdown: string) => {
     const { rule, options } = ruleConfig;
     const { ast, markdown } = extra;
 
-    // 将 (line, column) 换算成文档中的真实偏移。
-    // 用于 offset 缺失（规则侧合成 loc）时的兜底，避免切片退化成整篇文档。
+    // 将 (line, column) 换算成文档中的真实偏移；供 offset 缺失时的兜底，避免切片退化成整篇文档。
     const resolveOffset = (line: number, column: number): number => {
       let offset = 0;
       let currentLine = 1;
@@ -50,17 +68,20 @@ export const createRuleManager = (appliedMarkdown: string) => {
         offset = next + 1;
         currentLine += 1;
       }
-      // 行内偏移：列从 1 开始
       return Math.min(appliedMarkdown.length, offset + Math.max(0, column - 1));
     };
 
     // 上报方法，供选择器内部调用
     const report = (option: Omit<ReportOption, 'content' | 'name'>) => {
-      // offset 在 ReportOption 中是可选的（合成 loc 没有真实 offset），这里兜底
-      const startOffset = option.loc.start.offset
-        ?? resolveOffset(option.loc.start.line, option.loc.start.column);
-      const endOffset = option.loc.end.offset
-        ?? resolveOffset(option.loc.end.line, option.loc.end.column);
+      // 任一端 offset 缺失/非法即计一次兜底（按报告计数，不重复计起止两端）。
+      const needsFallback
+        = !isValidOffset(option.loc.start.offset) || !isValidOffset(option.loc.end.offset);
+      if (needsFallback) {
+        fallbackHits++;
+      }
+
+      const startOffset = resolveReportOffset(option.loc.start, resolveOffset);
+      const endOffset = resolveReportOffset(option.loc.end, resolveOffset);
       const markStart = Math.max(0, startOffset - 5);
       const markEnd = Math.min(appliedMarkdown.length, endOffset + 5);
 
@@ -82,6 +103,7 @@ export const createRuleManager = (appliedMarkdown: string) => {
   return {
     getReportData,
     getAllFixes,
+    getFallbackHits,
     createRuleContext
   };
 };
