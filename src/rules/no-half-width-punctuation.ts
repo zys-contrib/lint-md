@@ -66,7 +66,7 @@ const noHalfWidthPunctuation: LintMdRule = {
   create: (context) => {
     return {
       text: (node: PositionedTextNode) => {
-        const scanner = new TextScanner(node);
+        const scanner = new TextScanner(node, context.markdown);
         const { value } = scanner;
 
         // 预处理：找出需要转换的括号对
@@ -92,13 +92,11 @@ const noHalfWidthPunctuation: LintMdRule = {
             : hasAdjacentChinese(value, i);
 
           if (shouldConvert) {
+            const match = scanner.matchAt(i, 1);
             context.report({
-              loc: {
-                start: { line: pos.line, column: pos.column, offset: pos.offset },
-                end: { line: pos.line, column: pos.column + 1, offset: pos.offset + 1 }
-              },
+              loc: match.loc,
               message: `不应在中文中使用半角标点"${char}"，请使用全角"${fullChar}"`,
-              fix: fixer => fixer.replaceTextRange([pos.offset, pos.offset + 1], fullChar)
+              fix: fixer => fixer.replaceTextRange([pos.offset, pos.endOffset], fullChar)
             });
           }
         });
