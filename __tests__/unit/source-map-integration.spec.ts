@@ -38,12 +38,42 @@ describe('parser source-map integration', () => {
       .toEqual([[0, 1], [1, 2], [2, 3]]);
   });
 
-  test('keeps inlineCode on the identity fallback instead of registering an unsupported source map', () => {
-    const { ast, sourceMap } = parseMdWithSourceMap('`code`');
+  test.each([
+    ['padding normalization', '` a `', 'a', [2, 3]],
+    ['multiple backtick delimiters', '`` `value` ``', '`value`', [3, 10]]
+  ])('%s resolves inlineCode ranges with the parser source map', (_name, markdown, value, expectedRange) => {
+    const { ast, sourceMap } = parseMdWithSourceMap(markdown);
     registerTextNodeSourceMap(ast, sourceMap);
     const inlineCode = (ast.children[0] as any).children[0];
-    expect(inlineCode.type).toBe('inlineCode');
-    expect(new TextScanner(inlineCode).matchAt(0, 1).absoluteRange).toEqual([0, 1]);
+
+    expect(inlineCode).toMatchObject({ type: 'inlineCode', value });
+    expect(new TextScanner(inlineCode).matchAt(0, value.length).absoluteRange)
+      .toEqual(expectedRange);
+  });
+
+  test('runLint resolves an inlineCode selector fix through the source map', () => {
+    const inlineCodeRule: LintMdRule = {
+      meta: { name: 'inline-code-source-map' },
+      create: context => ({
+        inlineCode: node => {
+          const match = new TextScanner(node as any).matchAt(0, 1);
+          context.report({
+            loc: match.loc,
+            message: 'replace inline code value',
+            fix: fixer => fixer.replaceTextRange(match.absoluteRange, 'b')
+          });
+        }
+      })
+    };
+
+    const result = lintMarkdownInternal('` a `', [{ rule: inlineCodeRule }], true);
+    const [report] = result.lintResult.ruleManager.getReportData();
+
+    expect(report.loc).toMatchObject({
+      start: { offset: 2 },
+      end: { offset: 3 }
+    });
+    expect(result.fixedResult?.result).toBe('` b `');
   });
 
   test.each([
@@ -55,6 +85,23 @@ describe('parser source-map integration', () => {
 
     const second = lintMarkdownInternal(first.fixedResult!.result, halfWidthConfig, false);
     expect(second.lintResult.ruleManager.getReportData()).toHaveLength(0);
+  });
+
+  test.each([
+    [
+      'blockquote continuations',
+      ['> 中文(test)', '> 中文(test)'].join('\n'),
+      ['> 中文（test）', '> 中文（test）'].join('\n')
+    ],
+    [
+      'list continuation indentation',
+      ['- 中文(test)', '  中文(test)'].join('\n'),
+      ['- 中文（test）', '  中文（test）'].join('\n')
+    ]
+  ])('%s preserves container syntax while fixing mapped punctuation', (_name, input, expected) => {
+    const result = lintMarkdownInternal(input, halfWidthConfig, true);
+
+    expect(result.fixedResult?.result).toBe(expected);
   });
 
   test('diagnostic offsets and fix ranges are resolved by the same source-map range', () => {
